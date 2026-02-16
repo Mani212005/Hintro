@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taskflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/taskflow_test
+      JWT_SECRET: ci-secret-key-12345
+      JWT_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_IN: 7d
+      FRONTEND_URL: http://localhost:3000
+      ENABLE_DB_TESTS: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Generate Prisma client
+        run: pnpm --filter @taskflow/backend prisma:generate
+
+      - name: Apply migrations
+        run: pnpm --filter @taskflow/backend prisma:deploy
+
+      - name: Typecheck
+        run: pnpm --filter @taskflow/backend typecheck
+
+      - name: Lint
+        run: pnpm --filter @taskflow/backend lint
+
+      - name: Test
+        run: pnpm --filter @taskflow/backend test
+
+      - name: Frontend typecheck
+        run: pnpm --filter @taskflow/frontend typecheck
+
+      - name: Frontend lint
+        run: pnpm --filter @taskflow/frontend lint
+
+      - name: Frontend test
+        run: pnpm --filter @taskflow/frontend test
